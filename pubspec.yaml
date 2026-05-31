@@ -1,0 +1,64 @@
+name: k_china_fiei
+description: Marketplace de hardware para estudiantes FIEI-UNFV (La Cachina)
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Clean Architecture: manejo funcional de errores ---
+  fpdart: ^1.1.0                  # Either<Failure, T> para use cases
+
+  # --- Estado (Presentation Layer) ---
+  flutter_riverpod: ^2.5.1        # Gestión de estado reactivo
+  hooks_riverpod: ^2.5.2          # ConsumerHookWidget para hooks en Riverpod
+
+  # --- Navegación ---
+  go_router: ^13.2.0
+
+  # --- Supabase (Base de datos remota) ---
+  supabase_flutter: ^2.5.0
+
+  # --- HTTP (para datasources remotos opcionales) ---
+  dio: ^5.4.3+1
+
+  # --- Imágenes ---
+  cached_network_image: ^3.3.1
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+
+  # --- Almacenamiento seguro (tokens de sesión OAuth) ---
+  flutter_secure_storage: ^9.0.0
+
+  # --- WhatsApp ---
+  url_launcher: ^6.3.0
+
+  # --- UUID ---
+  uuid: ^4.4.0
+
+  # --- Búsqueda local fuzzy (equivalente a Fuse.js) ---
+  fuzzy: ^0.5.1
+
+  # --- Formato de moneda ---
+  intl: ^0.19.0
+
+  # --- UI ---
+  shimmer: ^3.0.0
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

@@ -1,0 +1,26 @@
+--- lib/features/product_management/data/datasources/product_local_datasource.dart
++++ lib/features/product_management/data/datasources/product_local_datasource.dart
+@@ -2,6 +2,7 @@
+ import 'dart:convert';
+ import 'package:supabase_flutter/supabase_flutter.dart';
++import 'package:flutter_image_compress/flutter_image_compress.dart';
+ import '../../../../core/error/exceptions.dart';
+ import '../models/user_product_model.dart';
+ 
+@@ -59,7 +60,12 @@
+       for (final path in imageUrls.take(3)) {
+         final file = File(path);
+         if (await file.exists()) {
+-          final bytes = await file.readAsBytes();
+-          base64Images.add(base64Encode(bytes));
++          final bytes = await FlutterImageCompress.compressWithFile(
++            file.absolute.path,
++            minWidth: 800,
++            minHeight: 800,
++            quality: 70,
++          );
++          if (bytes != null) {
++            base64Images.add(base64Encode(bytes));
++          }
+         }
+       }
