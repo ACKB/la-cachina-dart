@@ -20,7 +20,11 @@ class AuthRemoteDataSource {
       final success = await _supabase.auth.signInWithOAuth(
         OAuthProvider.azure,
         scopes: 'email profile User.Read',
-        redirectTo: kIsWeb ? '${Uri.base.origin}/' : 'io.supabase.kchina://login-callback/',
+        redirectTo: kIsWeb
+            ? (Uri.base.origin.contains('localhost')
+                ? '${Uri.base.origin}/'
+                : 'https://ACKB.github.io/la-cachina-dart/')
+            : 'io.supabase.kchina://login-callback/',
       );
 
       if (!success) {
