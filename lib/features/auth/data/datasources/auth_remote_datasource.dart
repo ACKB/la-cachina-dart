@@ -23,7 +23,7 @@ class AuthRemoteDataSource {
         redirectTo: kIsWeb
             ? (Uri.base.origin.contains('localhost')
                 ? '${Uri.base.origin}/'
-                : 'https://ACKB.github.io/la-cachina-dart/')
+                : '${Uri.base.origin}/la-cachina-dart/')
             : 'io.supabase.kchina://login-callback/',
       );
 
