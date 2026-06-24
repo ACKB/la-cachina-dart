@@ -249,6 +249,16 @@ ORDER BY p.created_at DESC;
 
 COMMENT ON VIEW public.v_catalog IS 'Vista del catálogo público — solo productos disponibles y vigentes';
 
+-- ── 9.1 Vista actualizable: usuarios editables ────────────────────────────
+--
+-- Vista de una única tabla que permite operaciones DML directas en perfiles.
+CREATE OR REPLACE VIEW public.v_editable_users AS
+SELECT id, name, image, whatsapp_number
+FROM public.users;
+
+COMMENT ON VIEW public.v_editable_users IS 'Vista actualizable para edición rápida de perfiles de usuario';
+
+
 -- ── 10. Datos de admin inicial ─────────────────────────────────────────────
 --
 -- ATENCIÓN: Cambiar el email al correo del administrador real.
@@ -357,3 +367,240 @@ CREATE POLICY "admins update reports" ON public.reports
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
   );
+
+
+-- ============================================================
+-- ADICIONES AVANZADAS DE BASE DE DATOS (REQUERIDOS BD II)
+-- ============================================================
+
+-- ── 1. Stored Procedures en PostgreSQL (Sección 3.5) ──────────────────────
+
+-- Automatización de expiración con control de transacciones y salida
+CREATE OR REPLACE PROCEDURE public.sp_expire_products_proc()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_affected INTEGER;
+BEGIN
+  UPDATE public.products
+  SET status = 'EXPIRED'
+  WHERE status = 'AVAILABLE' AND expires_at < now();
+  
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  RAISE NOTICE 'Se marcaron % productos como EXPIRED.', v_affected;
+  
+  COMMIT;
+END;
+$$;
+
+-- Inserción con validación y transacción integrada
+CREATE OR REPLACE PROCEDURE public.sp_insert_product_validated(
+  p_user_id UUID,
+  p_category_id UUID,
+  p_title TEXT,
+  p_description TEXT,
+  p_price INTEGER,
+  p_condition SMALLINT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF p_price <= 0 THEN
+    RAISE EXCEPTION 'El precio debe ser mayor a 0.';
+  END IF;
+  
+  INSERT INTO public.products (user_id, category_id, title, description, price, condition)
+  VALUES (p_user_id, p_category_id, p_title, p_description, p_price, p_condition);
+  
+  COMMIT;
+END;
+$$;
+
+-- Procedimiento con parámetros de salida (OUT)
+CREATE OR REPLACE PROCEDURE public.sp_get_user_metrics(
+  p_user_id UUID,
+  OUT p_active_count INTEGER,
+  OUT p_sold_count INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  SELECT COUNT(*) INTO p_active_count FROM public.products WHERE user_id = p_user_id AND status = 'AVAILABLE';
+  SELECT COUNT(*) INTO p_sold_count FROM public.products WHERE user_id = p_user_id AND status = 'SOLD';
+END;
+$$;
+
+-- Transferencia segura de productos con rollback de errores
+CREATE OR REPLACE PROCEDURE public.sp_safe_transfer_product(
+  p_product_id UUID,
+  p_current_owner UUID,
+  p_new_owner UUID
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.products WHERE id = p_product_id AND user_id = p_current_owner) THEN
+    RAISE EXCEPTION 'El producto no pertenece al propietario indicado.';
+  END IF;
+
+  UPDATE public.products
+  SET user_id = p_new_owner
+  WHERE id = p_product_id;
+
+  COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK;
+    RAISE EXCEPTION 'Error en transferencia: %', SQLERRM;
+END;
+$$;
+
+
+-- ── 2. Funciones de usuario adicionales (Sección 3.6) ─────────────────────
+
+-- Función tipo tabla (Table-valued function)
+CREATE OR REPLACE FUNCTION public.fn_get_kit_contents(p_kit_id UUID)
+RETURNS TABLE (
+  item_id UUID,
+  componente TEXT,
+  cantidad INTEGER
+) 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT id, component_name, quantity
+  FROM public.kit_items
+  WHERE kit_id = p_kit_id
+  ORDER BY sort_order;
+END;
+$$;
+
+-- Función escalar para formato de monedas
+CREATE OR REPLACE FUNCTION public.fn_cents_to_soles(p_cents INTEGER)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  RETURN ROUND(p_cents / 100.0, 2);
+END;
+$$;
+
+
+-- ── 3. Tabla y Triggers de Auditoría (Sección 3.7.1 y 3.7.3) ──────────────
+
+CREATE TABLE IF NOT EXISTS public.audit_products (
+  audit_id SERIAL PRIMARY KEY,
+  product_id UUID NOT NULL,
+  action TEXT NOT NULL,
+  old_title TEXT,
+  new_title TEXT,
+  old_price INTEGER,
+  new_price INTEGER,
+  changed_by UUID,
+  changed_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Habilitar RLS en tabla de auditoría para lectura sólo de admins
+ALTER TABLE public.audit_products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "admins read audit" ON public.audit_products;
+CREATE POLICY "admins read audit" ON public.audit_products
+  FOR SELECT USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE OR REPLACE FUNCTION public.fn_audit_product_changes()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF (TG_OP = 'UPDATE') THEN
+    INSERT INTO public.audit_products (product_id, action, old_title, new_title, old_price, new_price, changed_by)
+    VALUES (OLD.id, 'UPDATE', OLD.title, NEW.title, OLD.price, NEW.price, auth.uid());
+    RETURN NEW;
+  ELSIF (TG_OP = 'DELETE') THEN
+    INSERT INTO public.audit_products (product_id, action, old_title, old_price, changed_by)
+    VALUES (OLD.id, 'DELETE', OLD.title, OLD.price, auth.uid());
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_audit_products ON public.products;
+CREATE TRIGGER trg_audit_products
+  AFTER UPDATE OR DELETE ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.fn_audit_product_changes();
+
+
+-- ── 4. Trigger de Validación de Negocio (Sección 3.7.2) ───────────────────
+
+-- Límite de 10 productos activos simultáneos por estudiante
+CREATE OR REPLACE FUNCTION public.fn_limit_user_products()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_count
+  FROM public.products
+  WHERE user_id = NEW.user_id AND status = 'AVAILABLE';
+  
+  IF v_count >= 10 THEN
+    RAISE EXCEPTION 'Límite excedido: Un estudiante no puede tener más de 10 productos activos simultáneamente.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_limit_user_products ON public.products;
+CREATE TRIGGER trg_limit_user_products
+  BEFORE INSERT ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.fn_limit_user_products();
+
+
+-- ── 5. Endpoints RPC para el Dashboard del Administrador ──────────────────
+
+-- Obtener métricas analíticas (GROUP BY / HAVING / Aggregations)
+CREATE OR REPLACE FUNCTION public.get_admin_stats()
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_total_users INTEGER;
+  v_active_products INTEGER;
+  v_sold_products INTEGER;
+  v_categories_stats JSON;
+BEGIN
+  SELECT COUNT(*) INTO v_total_users FROM public.users;
+  SELECT COUNT(*) INTO v_active_products FROM public.products WHERE status = 'AVAILABLE';
+  SELECT COUNT(*) INTO v_sold_products FROM public.products WHERE status = 'SOLD';
+  
+  SELECT json_agg(t) INTO v_categories_stats
+  FROM (
+    SELECT c.name AS category_name, COUNT(p.id) AS count
+    FROM public.products p
+    JOIN public.categories c ON p.category_id = c.id
+    GROUP BY c.name
+  ) t;
+
+  RETURN json_build_object(
+    'total_users', v_total_users,
+    'active_products', v_active_products,
+    'sold_products', v_sold_products,
+    'categories_stats', COALESCE(v_categories_stats, '[]'::json)
+  );
+END;
+$$;
+
+-- Ejecución de mantenimiento desde la UI
+CREATE OR REPLACE FUNCTION public.run_expire_maintenance()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN public.expire_old_products();
+END;
+$$;
+

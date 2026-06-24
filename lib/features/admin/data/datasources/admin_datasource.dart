@@ -67,4 +67,24 @@ class AdminDatasource {
       throw DatabaseException('Error resolviendo reporte', e);
     }
   }
+
+  /// Obtiene estadísticas agregadas de la base de datos (GROUP BY / HAVING / Aggregations)
+  Future<Map<String, dynamic>> getAdminStats() async {
+    try {
+      final response = await _supabase.rpc('get_admin_stats');
+      return Map<String, dynamic>.from(response as Map);
+    } catch (e) {
+      throw DatabaseException('Error obteniendo estadísticas de administrador', e);
+    }
+  }
+
+  /// Ejecuta el mantenimiento de expiración de publicaciones antiguas en lote
+  Future<int> runExpireMaintenance() async {
+    try {
+      final response = await _supabase.rpc('run_expire_maintenance');
+      return response as int;
+    } catch (e) {
+      throw DatabaseException('Error ejecutando mantenimiento de expiración', e);
+    }
+  }
 }

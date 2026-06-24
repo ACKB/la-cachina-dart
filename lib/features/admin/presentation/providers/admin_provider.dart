@@ -15,6 +15,12 @@ final allProductsAdminProvider = FutureProvider<List<Map<String, dynamic>>>((ref
   return ref.read(_adminDsProvider).getAllProducts();
 });
 
+// ── Estadísticas analíticas del administrador ──────────────────────────────
+
+final adminStatsProvider = FutureProvider<Map<String, dynamic>>((ref) {
+  return ref.read(_adminDsProvider).getAdminStats();
+});
+
 // ── Notifier de acciones admin ───────────────────────────────────────────────
 
 final adminActionsProvider = Provider<AdminActions>((ref) => AdminActions(ref));
@@ -28,11 +34,13 @@ class AdminActions {
   Future<void> hideProduct(String productId) async {
     await _ds.hideProduct(productId);
     _ref.invalidate(allProductsAdminProvider);
+    _ref.invalidate(adminStatsProvider);
   }
 
   Future<void> deleteProduct(String productId) async {
     await _ds.deleteProduct(productId);
     _ref.invalidate(allProductsAdminProvider);
+    _ref.invalidate(adminStatsProvider);
   }
 
   Future<void> suspendUser(String userId) async {
@@ -42,5 +50,12 @@ class AdminActions {
   Future<void> resolveReport(String reportId) async {
     await _ds.resolveReport(reportId);
     _ref.invalidate(reportsProvider);
+  }
+
+  Future<int> runMaintenance() async {
+    final count = await _ds.runExpireMaintenance();
+    _ref.invalidate(allProductsAdminProvider);
+    _ref.invalidate(adminStatsProvider);
+    return count;
   }
 }

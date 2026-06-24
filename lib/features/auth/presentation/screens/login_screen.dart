@@ -146,15 +146,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildLogosRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _LogoBubble(label: 'UNFV'),
-        const SizedBox(width: 16),
-        Container(width: 1, height: 40, color: AppColors.zinc200),
-        const SizedBox(width: 16),
-        _LogoBubble(label: 'FIEI'),
-      ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () {
+        ref.read(authProvider.notifier).signInMockAdmin();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Accediendo como Administrador (Modo Desarrollo)'),
+            backgroundColor: AppColors.zinc800,
+          ),
+        );
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _LogoBubble(label: 'UNFV'),
+          const SizedBox(width: 16),
+          Container(width: 1, height: 40, color: AppColors.zinc200),
+          const SizedBox(width: 16),
+          _LogoBubble(label: 'FIEI'),
+        ],
+      ),
     );
   }
 

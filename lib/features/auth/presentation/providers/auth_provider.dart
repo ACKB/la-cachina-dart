@@ -121,6 +121,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     await signOut();
     // onAuthStateChange se encargará de actualizar a AuthUnauthenticated
   }
+
+  /// Dev-backdoor: Iniciar sesión directamente como administrador de prueba sin Azure OAuth
+  Future<void> signInMockAdmin() async {
+    state = const AsyncValue.loading();
+    await Future.delayed(const Duration(milliseconds: 500));
+    const mockUser = AuthUser(
+      id: '59ab53d1-c496-4ac7-9dd8-1c3dd0d94205',
+      email: '2023020308@unfv.edu.pe',
+      name: 'Administrador FIEI',
+      role: 'admin',
+    );
+    state = const AsyncValue.data(AuthAuthenticated(mockUser));
+  }
 }
 
 /// Provider principal de autenticación — accesible en toda la app
