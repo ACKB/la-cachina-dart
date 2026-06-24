@@ -217,6 +217,7 @@ erDiagram
         text whatsapp_number
         boolean email_verified
         text role
+        boolean verified_seller
         timestamptz created_at
         timestamptz updated_at
     }
@@ -242,6 +243,7 @@ erDiagram
         text github_url
         text type
         text course_label
+        integer renewal_count
         timestamptz created_at
         timestamptz updated_at
         timestamptz expires_at
@@ -268,6 +270,26 @@ erDiagram
         timestamptz resolved_at
         timestamptz created_at
     }
+    seller_ratings {
+        uuid id PK
+        uuid seller_id FK
+        uuid buyer_id FK
+        uuid product_id FK
+        smallint stars
+        text comment
+        timestamptz created_at
+    }
+    audit_products {
+        integer audit_id PK
+        uuid product_id FK
+        text action
+        text old_title
+        text new_title
+        integer old_price
+        integer new_price
+        uuid changed_by FK
+        timestamptz changed_at
+    }
 
     users ||--o{ products : "publica"
     users ||--o{ favorites : "guarda"
@@ -276,7 +298,12 @@ erDiagram
     categories ||--o{ products : "clasifica"
     products ||--o{ favorites : "es_guardado_en"
     products ||--o{ kit_items : "contiene"
-    products ||--o{ reports : "recibe_denuncia"
+        products ||--o{ reports : "recibe_denuncia"
+    users ||--o{ seller_ratings : "recibe calificación (seller_id)"
+    users ||--o{ seller_ratings : "da calificación (buyer_id)"
+    products ||--o{ seller_ratings : "origina"
+    products ||--o{ audit_products : "audita"
+    users ||--o{ audit_products : "realiza (changed_by)"
 ```
 
 ---
