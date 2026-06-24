@@ -10,6 +10,9 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../favorites/presentation/providers/favorites_provider.dart';
 import '../../domain/entities/catalog_product.dart';
 import '../providers/catalog_provider.dart';
+import '../providers/seller_rating_provider.dart';
+import '../widgets/seller_rating_widget.dart';
+import '../widgets/rate_seller_bottom_sheet.dart';
 
 /// PB-05: Pantalla de detalle del producto con galería fullscreen,
 /// descripción completa, ficha técnica, tips técnicos y contacto WhatsApp.
@@ -308,29 +311,87 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  // ── Vendedor ───────────────────────────────────────────────────────────────
+  // ── Vendedor con estrellas ─────────────────────────────────────────────────
 
   Widget _buildSellerInfo(CatalogProduct p) {
-    return _Card(
-      title: '👤 Vendedor',
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: AppColors.primaryLight,
-            child: Text(
-              p.sellerFirstName.isNotEmpty ? p.sellerFirstName[0].toUpperCase() : 'U',
-              style: AppTextStyles.titleSm.copyWith(color: AppColors.primary),
+    final sellerAsync = ref.watch(sellerProfileProvider(p.userId));
+    final currentUser = ref.watch(currentUserProvider);
+    final isOwnProduct = currentUser?.id == p.userId;
+
+    return sellerAsync.when(
+      loading: () => const _Card(
+        title: '👤 Vendedor',
+        child: SizedBox(
+          height: 60,
+          child: Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppColors.primary,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              p.sellerName ?? 'Usuario FIEI',
-              style: AppTextStyles.bodyMd,
-            ),
-          ),
-        ],
+        ),
       ),
+      error: (_, __) => _Card(
+        title: '👤 Vendedor',
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: AppColors.primaryLight,
+              child: Text(
+                p.sellerFirstName.isNotEmpty
+                    ? p.sellerFirstName[0].toUpperCase()
+                    : 'U',
+                style: AppTextStyles.titleSm.copyWith(color: AppColors.primary),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                p.sellerName ?? 'Usuario FIEI',
+                style: AppTextStyles.bodyMd,
+              ),
+            ),
+          ],
+        ),
+      ),
+      data: (profile) {
+        if (profile == null) {
+          return _Card(
+            title: '👤 Vendedor',
+            child: Text(p.sellerName ?? 'Usuario FIEI',
+                style: AppTextStyles.bodyMd),
+          );
+        }
+
+        return Column(
+          children: [
+            SellerProfileCard(profile: profile),
+
+            // Botón de calificar (solo si es comprador, no el propio vendedor)
+            if (currentUser != null && !isOwnProduct)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: OutlinedButton.icon(
+                  onPressed: () => RateSellerBottomSheet.show(
+                    context:    context,
+                    sellerId:   p.userId,
+                    buyerId:    currentUser.id,
+                    productId:  p.id,
+                    sellerName: profile.sellerName,
+                  ),
+                  icon: const Icon(Icons.star_outline_rounded, size: 18),
+                  label: const Text('Calificar al vendedor'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    minimumSize: const Size(double.infinity, 44),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
